@@ -20,7 +20,25 @@ const jsonLd = {
         "Satirical web app that turns a GitHub account's public activity into a mock criminal rap sheet.",
       publisher: { "@id": `${SITE}/#org` },
     },
-    { "@type": "Organization", "@id": `${SITE}/#org`, name: "CommitCrimes", url: SITE },
+    {
+      "@type": "Organization",
+      "@id": `${SITE}/#org`,
+      name: "CommitCrimes",
+      url: SITE,
+      logo: `${SITE}/icon.svg`,
+      sameAs: [
+        "https://x.com/gitmostwanted",
+        "https://github.com/zvoque/commitcrimes",
+      ],
+      founder: { "@id": `${SITE}/#creator` },
+    },
+    {
+      "@type": "Person",
+      "@id": `${SITE}/#creator`,
+      name: "zvoque",
+      url: "https://x.com/zvoque",
+      sameAs: ["https://x.com/zvoque", "https://github.com/zvoque"],
+    },
     {
       "@type": "WebApplication",
       "@id": `${SITE}/#app`,
@@ -31,6 +49,8 @@ const jsonLd = {
       description:
         "Parody tool that charges GitHub accounts with comedic crimes against version control, based on public git habits. Not affiliated with GitHub.",
       offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+      publisher: { "@id": `${SITE}/#org` },
+      creator: { "@id": `${SITE}/#creator` },
     },
   ],
 };
