@@ -36,6 +36,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
+    site: "@gitmostwanted",
+    creator: "@gitmostwanted",
     title: "CommitCrimes: your git habits, prosecuted",
     description: "Paste a GitHub username. Get sentenced. Earn your badge.",
   },
