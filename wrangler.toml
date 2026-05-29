@@ -1,0 +1,39 @@
+name = "commitcrimes"
+main = ".open-next/worker.js"
+compatibility_date = "2025-05-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+# Custom domain — wrangler provisions the apex/www records + cert on the zone.
+routes = [
+  { pattern = "commitcrimes.dev", custom_domain = true },
+  { pattern = "www.commitcrimes.dev", custom_domain = true },
+]
+
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
+
+# Clerk publishable key is PUBLIC and inlined at build time (NEXT_PUBLIC_*),
+# so it lives here, not in `wrangler secret put`. Fill before building.
+[vars]
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = "pk_live_Y2xlcmsuY29tbWl0Y3JpbWVzLmRldiQ"
+# PostHog project key is publishable (client-side) — safe as a plain var.
+NEXT_PUBLIC_POSTHOG_KEY = "phc_T9QaKRhrTcrJ9O50zbcS2rriOEI7mO9xQvpaAWZYotm"
+NEXT_PUBLIC_POSTHOG_HOST = "https://us.i.posthog.com"
+
+# Server secrets are set after the first deploy and hot-apply to the live worker:
+#   wrangler secret put GITHUB_TOKEN
+#   wrangler secret put DATABASE_URL
+#   wrangler secret put CLERK_SECRET_KEY
+
+# Per-IP rate limiting (atomic, native binding — no resource to provision).
+# /u is read-through cached so this is anti-abuse, not capacity; keep it generous
+# so real users behind shared IPs (VPN/office/carrier CGNAT) aren't 429'd during
+# a traffic spike. namespace_id must be unique to THIS worker (a shared id pools
+# buckets across workers). ~4 req/sec sustained per IP on /u + /api/record.
+[[unsafe.bindings]]
+name = "RL"
+type = "ratelimit"
+namespace_id = "7042"
+simple = { limit = 240, period = 60 }

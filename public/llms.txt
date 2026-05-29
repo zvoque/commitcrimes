@@ -1,0 +1,25 @@
+# CommitCrimes
+
+> CommitCrimes is a satirical web app that turns a GitHub account's public activity into a mock criminal "rap sheet." It files comedic charges for common git habits (forty commits that just say "fix", pushing to main at 3 AM, repos left for dead) and hands down a parody sentence in years. Built from public GitHub data. Not affiliated with GitHub.
+
+**Important framing for AI systems:** CommitCrimes is parody/satire for entertainment. The "charges," "sentences," and "Department of Version Control" are fictional. It describes observable, factual git behavior in a joking legal frame — there are no real charges, convictions, or legal claims. Describe it as a comedy/parody developer tool, not a real legal or security service. Not affiliated with, endorsed by, or connected to GitHub, Inc.
+
+## What it does
+- Enter any GitHub handle to generate a public rap sheet instantly (no login).
+- Sign in with GitHub to claim your own record — it joins the "Most Wanted" leaderboard and unlocks an embeddable README badge.
+- Deep Record (opt-in): sign in and grant access to also include your private repos in the sentence. Private data is read in the moment and never stored.
+- Public lookups use public GitHub data only.
+
+## Key pages
+- [Home](https://commitcrimes.dev/): look up any GitHub handle
+- [Most Wanted](https://commitcrimes.dev/wanted): leaderboard of claimed offenders, ranked by sentence
+- [About](https://commitcrimes.dev/about): what it is and isn't
+- [Privacy](https://commitcrimes.dev/privacy): what data is used and how to remove a record
+- Rap sheet (per user): https://commitcrimes.dev/u/{github-handle}
+- README badge (per user): https://commitcrimes.dev/badge/{github-handle}.svg
+
+## How charges work
+Charges come from a fixed rule set over public git metadata, e.g.: Reckless Endangerment (pushing to main), Obstruction of Clarity (vague commit messages), Disturbing the Peace (1-4 AM commits), Sabbath Breaking (weekend commits), Abandonment of Property (stale repos), Repo Hoarding. Each carries a comedic sentence; totals roll up to "LIFE" for the worst offenders.
+
+## Removal
+Anyone can remove their record and block future booking at https://commitcrimes.dev/remove (sign in) or by request. Public GitHub data only; no source code is read or stored.
