@@ -178,6 +178,7 @@ export interface WantedEntry {
   chargesCount: number;
   deep: boolean;
   claimed: boolean;
+  recordClass: string | null;
 }
 
 // Most Wanted = opt-in claimed offenders + the curated featured seed, ranked by
@@ -186,7 +187,7 @@ export async function topWanted(limit = 50): Promise<WantedEntry[]> {
   const db = getDb();
   if (!db) return [];
   try {
-    return await db
+    const rows = await db
       .select({
         login: records.login,
         name: records.name,
@@ -196,6 +197,7 @@ export async function topWanted(limit = 50): Promise<WantedEntry[]> {
         chargesCount: records.chargesCount,
         deep: records.deep,
         claimed: records.claimed,
+        data: records.data,
       })
       .from(records)
       .where(
@@ -206,6 +208,12 @@ export async function topWanted(limit = 50): Promise<WantedEntry[]> {
       )
       .orderBy(desc(records.totalYears))
       .limit(limit);
+    // recordClass lives in the stored JSON (no dedicated column). Older rows
+    // cached before tiers won't have it -> null, no tag, self-heals on refresh.
+    return rows.map(({ data, ...r }) => ({
+      ...r,
+      recordClass: (data as CrimeRecord | null)?.recordClass ?? null,
+    }));
   } catch {
     return [];
   }

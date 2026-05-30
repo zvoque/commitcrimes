@@ -57,6 +57,10 @@ export default function ResultView({
       total_years: record.sentence.totalYears,
       owner: isOwner,
       claimed,
+      // Lets us watch the live tier distribution and calibrate thresholds.
+      record_class: record.recordClass ?? null,
+      felonies: record.charges.filter((c) => c.severity === "felony").length,
+      life: /LIFE/.test(record.sentence.text),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [record.login]);

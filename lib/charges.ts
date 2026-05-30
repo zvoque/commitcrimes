@@ -8,6 +8,8 @@ import type {
   Sentence,
   CrimeRecord,
   RepoInfo,
+  CommitInfo,
+  Severity,
 } from "./types";
 
 // Genuinely low-information / placeholder commit messages.
@@ -81,6 +83,33 @@ function firstLine(msg: string): string {
   return msg.split("\n")[0].trim();
 }
 
+// A commit message is "vague" only if it's a bare low-effort line — NOT a
+// conventional commit with a real description ("fix: handle null in parser").
+// Strips a leading "type:" / "type(scope):" and bails if real content follows.
+function isVagueMessage(msg: string): boolean {
+  const line = firstLine(msg);
+  const body = line.replace(/^[a-z]+(\([^)]*\))?:\s*/i, "");
+  if (body !== line && body.length >= 6) return false; // had a "type:" + description
+  if (line.length > 20) return false; // long freeform message carries content
+  return VAGUE_MESSAGES.some((re) => re.test(line));
+}
+
+// Late-night commits in the dev's LOCAL time. We only have UTC timestamps, so
+// estimate their offset from the busiest commit hour (assume peak ≈ 15:00 local)
+// and flag genuine local 1-4 AM. Avoids charging non-UTC devs for daytime work.
+function lateNightCount(commits: CommitInfo[]): number {
+  if (commits.length < 8) return commits.filter((c) => c.hour >= 1 && c.hour <= 4).length;
+  const byHour = new Array(24).fill(0);
+  for (const c of commits) byHour[c.hour]++;
+  let peak = 0;
+  for (let h = 1; h < 24; h++) if (byHour[h] > byHour[peak]) peak = h;
+  const offset = 15 - peak; // local = (utc + offset) mod 24
+  return commits.filter((c) => {
+    const local = (((c.hour + offset) % 24) + 24) % 24;
+    return local >= 1 && local <= 4;
+  }).length;
+}
+
 // Simple deterministic hash -> non-negative int.
 function hash(s: string): number {
   let h = 0;
@@ -104,10 +133,18 @@ interface Spec {
   perCount: number;
   count: number;
   cap: number;
+  // classification
+  severity?: Severity; // defaults to "misdemeanor"
+  aggravatedAt?: number; // count at/above which a misdemeanor escalates to felony
 }
 
 function score(s: Spec): number {
   return clamp(s.base + s.perCount * s.count, Math.min(s.base + s.perCount, s.cap), s.cap);
+}
+
+// Felony degree from the charge's weight: 1° (worst) .. 3°.
+function felonyDegree(years: number): number {
+  return years >= 500 ? 1 : years >= 120 ? 2 : 3;
 }
 
 export function buildCharges(input: RecordInput): Charge[] {
@@ -115,8 +152,26 @@ export function buildCharges(input: RecordInput): Charge[] {
   const login = input.login;
   const { commits } = input;
   const real = input.repos.filter((r) => !r.fork);
-  const add = (s: Spec) =>
-    charges.push({ id: s.id, title: s.title, statute: s.statute, detail: s.detail, years: score(s) });
+  const now = Date.now();
+  const add = (s: Spec) => {
+    const years = score(s);
+    let severity: Severity = s.severity ?? "misdemeanor";
+    let aggravated = false;
+    if (severity === "misdemeanor" && s.aggravatedAt != null && s.count >= s.aggravatedAt) {
+      severity = "felony";
+      aggravated = true;
+    }
+    charges.push({
+      id: s.id,
+      title: s.title,
+      statute: s.statute,
+      detail: s.detail,
+      years,
+      severity,
+      ...(severity === "felony" ? { degree: felonyDegree(years) } : {}),
+      ...(aggravated ? { aggravated: true } : {}),
+    });
+  };
 
   // ---- SERIOUS: high years per count ----
 
@@ -132,19 +187,24 @@ export function buildCharges(input: RecordInput): Charge[] {
         `${mainPushes} commit${plural(mainPushes)} shoved into main with no seatbelt`,
         `bypassed code review ${mainPushes} time${plural(mainPushes)}, pushed raw to main`,
       ]),
-      base: 8, perCount: 4, count: mainPushes, cap: 30,
+      base: 15, perCount: 30, count: mainPushes, cap: 6000, // headroom for 3x-4x LIFE whales
+      severity: "felony", // pushing straight to main, no review: cardinal sin
     });
   }
 
-  // Possession of Stolen Goods — fork-heavy portfolio.
-  const forks = input.repos.filter((r) => r.fork).length;
-  if (input.repos.length >= 5 && forks / input.repos.length > 0.55) {
+  // Possession of Stolen Goods — a portfolio of forks left to rot. Active
+  // contribution forks (recently pushed) are exempt, so OSS contributors aren't
+  // charged for PR work — only forked-and-forgotten repos count.
+  const staleForks = input.repos.filter(
+    (r) => r.fork && now - new Date(r.pushedAt).getTime() > YEAR_MS
+  ).length;
+  if (input.repos.length >= 5 && staleForks / input.repos.length > 0.5) {
     add({
       id: "stolen-goods",
       title: "Possession of Stolen Goods",
       statute: "§ 165.4",
-      detail: `${forks} of ${input.repos.length} repos are forks, mostly other people's work`,
-      base: 12, perCount: 0, count: 0, cap: 12,
+      detail: `${staleForks} of ${input.repos.length} repos are forks left to rot, mostly other people's work`,
+      base: 50, perCount: 0, count: 0, cap: 50,
     });
   }
 
@@ -159,12 +219,11 @@ export function buildCharges(input: RecordInput): Charge[] {
         `${undocumented} of ${real.length} repos shipped with zero description`,
         `${undocumented} repos with no docs, good luck to anyone cloning them`,
       ]),
-      base: 6, perCount: 0, count: 0, cap: 6,
+      base: 30, perCount: 0, count: 0, cap: 30,
     });
   }
 
   // Fled the Jurisdiction — once active, now a ghost.
-  const now = Date.now();
   const lastPush = real.reduce((m, r) => Math.max(m, new Date(r.pushedAt).getTime()), 0);
   if (real.length >= 2 && lastPush > 0 && now - lastPush > 2 * YEAR_MS) {
     const yrs = Math.floor((now - lastPush) / YEAR_MS);
@@ -173,7 +232,7 @@ export function buildCharges(input: RecordInput): Charge[] {
       title: "Fled the Jurisdiction",
       statute: "§ 836.0",
       detail: `No public activity in ${yrs} years. Whereabouts unknown.`,
-      base: 10, perCount: 0, count: 0, cap: 10,
+      base: 60, perCount: 0, count: 0, cap: 60,
     });
   }
 
@@ -190,27 +249,33 @@ export function buildCharges(input: RecordInput): Charge[] {
         `${swears} commit message${plural(swears)} that cursed out the codebase`,
         `${swears} time${plural(swears)} caught swearing at the compiler in writing`,
       ]),
-      base: 2, perCount: 2, count: swears, cap: 16,
+      base: 5, perCount: 6, count: swears, cap: 250,
+      aggravatedAt: 20, // 20+ profane commits: aggravated
     });
   }
 
-  // Abandonment of Property — repos untouched > 1 year.
-  const abandoned = real.filter((r) => now - new Date(r.pushedAt).getTime() > YEAR_MS).length;
+  // Abandonment of Property — repos started and dropped. Stale (1yr+ untouched)
+  // AND low-traction (<3 stars): a finished, popular library left untouched is
+  // STABLE, not abandoned, so stars exempt it. Only counts the junk nobody uses.
+  const abandoned = real.filter(
+    (r) => r.stars < 3 && now - new Date(r.pushedAt).getTime() > YEAR_MS
+  ).length;
   if (abandoned > 0) {
     add({
       id: "abandonment",
       title: "Abandonment of Property",
       statute: "§ 510.7",
-      detail: `${abandoned} repo${plural(abandoned)} left for dead (1yr+ untouched)`,
-      base: 0, perCount: 2, count: abandoned, cap: 18,
+      detail: `${abandoned} repo${plural(abandoned)} left for dead: no stars, untouched 1yr+`,
+      base: 0, perCount: 1, count: abandoned, cap: 30,
     });
   }
 
   // Habitual Offender — same exact low-effort message used over and over.
   const msgCounts = new Map<string, number>();
   for (const c of commits) {
+    if (!isVagueMessage(c.message)) continue;
     const m = firstLine(c.message).toLowerCase();
-    if (VAGUE_MESSAGES.some((re) => re.test(m))) msgCounts.set(m, (msgCounts.get(m) ?? 0) + 1);
+    msgCounts.set(m, (msgCounts.get(m) ?? 0) + 1);
   }
   let repeatMsg = "";
   let repeatN = 0;
@@ -221,14 +286,15 @@ export function buildCharges(input: RecordInput): Charge[] {
       title: "Habitual Offender",
       statute: "§ 668.0",
       detail: `Committed "${repeatMsg.slice(0, 20)}" ${repeatN} separate times`,
-      base: 5, perCount: 0, count: 0, cap: 5,
+      base: 40, perCount: 0, count: repeatN, cap: 40,
+      aggravatedAt: 30, // 30+ identical low-effort messages: aggravated
     });
   }
 
   // ---- MINOR: low years per count, but they stack ----
 
   // Obstruction of Clarity — vague commit messages.
-  const vague = commits.filter((c) => VAGUE_MESSAGES.some((re) => re.test(firstLine(c.message)))).length;
+  const vague = commits.filter((c) => isVagueMessage(c.message)).length;
   if (vague > 0) {
     add({
       id: "obstruction-of-clarity",
@@ -239,12 +305,13 @@ export function buildCharges(input: RecordInput): Charge[] {
         `${vague} commit message${plural(vague)} a stranger could not decode`,
         `${vague} low-effort message${plural(vague)} like "fix" and "stuff"`,
       ]),
-      base: 1, perCount: 1, count: vague, cap: 25,
+      base: 1, perCount: 1, count: vague, cap: 150,
+      aggravatedAt: 120, // 120+ meaningless commits: aggravated
     });
   }
 
   // Disturbing the Peace — commits between 1-4 AM (UTC).
-  const lateNight = commits.filter((c) => c.hour >= 1 && c.hour <= 4).length;
+  const lateNight = lateNightCount(commits);
   if (lateNight > 0) {
     add({
       id: "disturbing-the-peace",
@@ -254,7 +321,7 @@ export function buildCharges(input: RecordInput): Charge[] {
         `${lateNight} commit${plural(lateNight)} logged between 1 and 4 AM`,
         `${lateNight} commit${plural(lateNight)} pushed between 1 and 4 AM. Go to bed.`,
       ]),
-      base: 1, perCount: 1, count: lateNight, cap: 15,
+      base: 2, perCount: 2, count: lateNight, cap: 70,
     });
   }
 
@@ -266,7 +333,7 @@ export function buildCharges(input: RecordInput): Charge[] {
       title: "Sabbath Breaking",
       statute: "§ 311.2",
       detail: `${weekend} commit${plural(weekend)} pushed on weekends. Touch grass.`,
-      base: 0, perCount: 1, count: weekend, cap: 12,
+      base: 0, perCount: 2, count: weekend, cap: 60,
     });
   }
 
@@ -281,7 +348,8 @@ export function buildCharges(input: RecordInput): Charge[] {
       title: "Vandalism",
       statute: "§ 594.0",
       detail: `${shouting} commit message${plural(shouting)} SCREAMED IN ALL CAPS`,
-      base: 1, perCount: 2, count: shouting, cap: 14,
+      base: 5, perCount: 8, count: shouting, cap: 250,
+      aggravatedAt: 12, // 12+ all-caps tirades: aggravated
     });
   }
 
@@ -293,19 +361,19 @@ export function buildCharges(input: RecordInput): Charge[] {
       title: "Failure to Name",
       statute: "§ 101.3",
       detail: `${badNamed} repo${plural(badNamed)} named like "untitled" or "final-final"`,
-      base: 1, perCount: 1, count: badNamed, cap: 7,
+      base: 2, perCount: 3, count: badNamed, cap: 45,
     });
   }
 
   // Repo Hoarding — too many repos.
-  if (input.publicRepos > 40) {
-    const over = input.publicRepos - 40;
+  if (input.publicRepos > 80) {
+    const over = input.publicRepos - 80;
     add({
       id: "hoarding",
       title: "Repo Hoarding",
       statute: "§ 496.0",
       detail: `${input.publicRepos} public repos. Some of these you forgot exist.`,
-      base: 1, perCount: 1, count: Math.floor(over / 10), cap: 10,
+      base: 2, perCount: 2, count: Math.floor(over / 10), cap: 60,
     });
   }
 
@@ -318,7 +386,7 @@ export function buildCharges(input: RecordInput): Charge[] {
       title: "Loitering",
       statute: "§ 647.0",
       detail: "Account exists. Has shipped absolutely nothing.",
-      base: 4, perCount: 0, count: 0, cap: 4,
+      base: 20, perCount: 0, count: 0, cap: 20,
     });
   } else if (input.following > Math.max(10, input.followers * 3)) {
     add({
@@ -326,7 +394,7 @@ export function buildCharges(input: RecordInput): Charge[] {
       title: "Loitering with Intent",
       statute: "§ 647.0",
       detail: `Follows ${input.following}, followed by ${input.followers}. Professional lurker.`,
-      base: 3, perCount: 0, count: 0, cap: 3,
+      base: 15, perCount: 0, count: 0, cap: 15,
     });
   }
 
@@ -337,19 +405,52 @@ export function buildCharges(input: RecordInput): Charge[] {
       title: "Identity Concealment",
       statute: "§ 530.5",
       detail: "No name. No bio. Operating entirely in the shadows.",
-      base: 3, perCount: 0, count: 0, cap: 3,
+      base: 20, perCount: 0, count: 0, cap: 20,
     });
   }
 
   return charges.sort((a, b) => b.years - a.years);
 }
 
-const LIFE = 99;
+// LIFE is reserved for the genuinely egregious: it needs BREADTH (>= 2 felony
+// charges — multiple severe crimes) AND DEPTH (a massive total). A heavy single-
+// felony record still shows a big raw number, just not LIFE. Tunable.
+const LIFE_FELONIES = 2;
+const LIFE_BAR = 1500;
+const LIFE_UNIT = 1500; // years per consecutive LIFE sentence (drives multiples)
+
+function felonyCount(charges: Charge[]): number {
+  return charges.filter((c) => (c.severity ?? "misdemeanor") === "felony").length;
+}
+
+// A no-felony record can pile on years but never reaches LIFE; compress its tail
+// asymptotically below 100 so heavy-but-petty offenders stay distinct and the
+// "100+ years" mark always means a felony is present. Tunable.
+function softCapMisdemeanant(raw: number): number {
+  const KNEE = 70, CEIL = 98, SCALE = 30;
+  if (raw <= KNEE) return raw;
+  return Math.round(KNEE + (CEIL - KNEE) * (1 - SCALE / (SCALE + raw - KNEE)));
+}
+
+// Thousands separators, safe in every runtime (no toLocaleString quirks).
+function commas(n: number): string {
+  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+// Whole-record label by worst charge present.
+export function recordClass(charges: Charge[]): string {
+  if (charges.length === 0) return "Model Citizen"; // clean = a rare flex, not a dead end
+  const felonies = felonyCount(charges);
+  if (felonies >= 3) return "Public Enemy";
+  if (felonies >= 2) return "Habitual Felon";
+  if (felonies === 1) return "Felon";
+  return "Misdemeanant";
+}
 
 export function computeSentence(charges: Charge[]): Sentence {
-  const totalYears = charges.reduce((sum, c) => sum + c.years, 0);
+  const raw = charges.reduce((sum, c) => sum + c.years, 0);
 
-  if (totalYears === 0) {
+  if (raw === 0) {
     return {
       totalYears: 0,
       text: "Released, no priors",
@@ -359,16 +460,18 @@ export function computeSentence(charges: Charge[]): Sentence {
     };
   }
 
+  const felonies = felonyCount(charges);
+  // Felons keep their raw (big) total; petty records compress below 100.
+  const totalYears = felonies > 0 ? raw : softCapMisdemeanant(raw);
   const lead = charges[0];
   const otherCount = charges.length - 1;
 
   let text: string;
-  if (totalYears >= LIFE) {
-    const lives = Math.floor(totalYears / LIFE);
-    const rem = totalYears % LIFE;
-    text = `${lives} consecutive LIFE sentence${plural(lives)}${rem ? ` + ${rem} years` : ""}`;
+  if (felonies >= LIFE_FELONIES && totalYears >= LIFE_BAR) {
+    const lives = Math.floor(totalYears / LIFE_UNIT);
+    text = `${lives} consecutive LIFE sentence${plural(lives)}`;
   } else {
-    text = `${totalYears} years`;
+    text = `${commas(totalYears)} years`;
   }
 
   const headline =
@@ -417,6 +520,7 @@ export function buildRecord(input: RecordInput): CrimeRecord {
     bookingNumber: bookingNumber(input.login, created),
     charges,
     sentence,
+    recordClass: recordClass(charges),
     stats: {
       aliases,
       modusOperandi: langs.length ? langs.slice(0, 3) : ["Unknown"],

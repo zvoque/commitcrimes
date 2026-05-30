@@ -1,4 +1,5 @@
 import type { CrimeRecord } from "@/lib/types";
+import { chargeClassLabel } from "@/lib/chargeLabel";
 
 function Barcode() {
   // Deterministic-looking barcode from fixed widths.
@@ -94,6 +95,19 @@ export default function RapSheet({ record }: { record: CrimeRecord }) {
               {guilty ? "Guilty" : "Cleared"}
             </span>
           </div>
+          {record.recordClass && (
+            <span
+              className={`mb-2 mr-2 inline-block w-fit border px-1.5 py-0.5 text-[0.68rem] uppercase tracking-[0.2em] ${
+                /felon|public enemy/i.test(record.recordClass)
+                  ? "border-stamp text-stamp"
+                  : /model citizen/i.test(record.recordClass)
+                    ? "border-[#3f6f3f] text-[#3f6f3f]"
+                    : "border-ink/50 text-ink-soft"
+              }`}
+            >
+              {record.recordClass}
+            </span>
+          )}
           {record.deep && (
             <span className="mb-2 inline-block w-fit border border-[#3f6f3f] px-1.5 py-0.5 text-[0.68rem] tracking-[0.2em] uppercase text-[#3f6f3f]">
               ✓ Deep Record
@@ -148,6 +162,15 @@ export default function RapSheet({ record }: { record: CrimeRecord }) {
                   <span className="min-w-0 break-words font-stencil text-base uppercase leading-tight">
                     {c.title}
                   </span>
+                  <span
+                    className={`shrink-0 border px-1 py-0.5 text-[0.58rem] font-stencil uppercase leading-none tracking-[0.1em] ${
+                      (c.severity ?? "misdemeanor") === "felony"
+                        ? "border-stamp text-stamp"
+                        : "border-ink/40 text-ink-soft"
+                    }`}
+                  >
+                    {chargeClassLabel(c)}
+                  </span>
                   <span className="leader" />
                   <span className="shrink-0 font-stencil text-base text-stamp">
                     {c.years}y
@@ -159,7 +182,7 @@ export default function RapSheet({ record }: { record: CrimeRecord }) {
           </ul>
         ) : (
           <p className="py-3 text-center text-sm italic text-ink-soft">
-            Suspiciously clean. The Department is watching.
+            Certified clean. Cleaner than 98% of developers. Suspiciously so.
           </p>
         )}
       </div>

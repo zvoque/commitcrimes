@@ -32,12 +32,20 @@ export interface RecordInput {
   repos: RepoInfo[];
 }
 
+export type Severity = "misdemeanor" | "felony";
+
 export interface Charge {
   id: string;
   title: string;
   statute: string;
   detail: string;
   years: number;
+  // Classification. Most charges are misdemeanors; a few are felonies by nature
+  // (e.g. pushing straight to main) or get promoted when their count is extreme
+  // (aggravated). Optional for backward-compat with records cached pre-tiers.
+  severity?: Severity;
+  degree?: number; // felony degree: 1 (worst) .. 3
+  aggravated?: boolean; // misdemeanor promoted to felony by extreme count
 }
 
 export interface Sentence {
@@ -66,6 +74,7 @@ export interface CrimeRecord {
   charges: Charge[];
   sentence: Sentence;
   stats: RecordStats;
+  recordClass?: string; // "Misdemeanant" | "Felon" | "Habitual Felon"
   deep?: boolean; // includes private-repo data (via opt-in GitHub App)
   // Public-safe stat overrides for a deep record, computed at build time from
   // PUBLIC repos only. Applied by sanitizeDeepRecord before publishing so the

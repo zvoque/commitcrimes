@@ -1,7 +1,8 @@
 // Quick sanity checks for the charge + sentence engine.
 // Run: npx --yes tsx lib/charges.test.ts
 import assert from "node:assert/strict";
-import { buildCharges, computeSentence, buildRecord } from "./charges";
+import { buildCharges, computeSentence, buildRecord, recordClass } from "./charges";
+import type { Charge } from "./types";
 import { sanitizeDeepRecord } from "./deep";
 import type { CommitInfo, CrimeRecord, RecordInput, RepoInfo } from "./types";
 
@@ -98,11 +99,12 @@ test("ALL CAPS commits trigger Vandalism", () => {
 });
 
 test("fork-heavy portfolio triggers Possession of Stolen Goods", () => {
+  const stale = "2020-01-01T00:00:00Z"; // forked-and-forgotten, not active PR work
   const repos = [
-    repo({ name: "a", fork: true }),
-    repo({ name: "b", fork: true }),
-    repo({ name: "c", fork: true }),
-    repo({ name: "d", fork: true }),
+    repo({ name: "a", fork: true, pushedAt: stale }),
+    repo({ name: "b", fork: true, pushedAt: stale }),
+    repo({ name: "c", fork: true, pushedAt: stale }),
+    repo({ name: "d", fork: true, pushedAt: stale }),
     repo({ name: "e", fork: false }),
   ];
   assert.ok(buildCharges(makeInput({ repos })).find((c) => c.id === "stolen-goods"));
@@ -203,6 +205,58 @@ test("sanitizeDeepRecord: no private data leaks into a published record", () => 
   assert.doesNotMatch(clean.charges[0].detail, /secret-internal-msg/);
   // Override blob never persisted.
   assert.equal(clean.publicStats, undefined);
+});
+
+test("push to main is charged as a felony", () => {
+  const charges = buildCharges(makeInput({ commits: [commit({ ref: "refs/heads/main" })] }));
+  assert.equal(charges.find((c) => c.id === "reckless-endangerment")?.severity, "felony");
+});
+
+test("extreme count aggravates a misdemeanor to felony", () => {
+  const light = buildCharges(makeInput({ commits: Array.from({ length: 5 }, () => commit({ message: "fuck" })) }));
+  const heavy = buildCharges(makeInput({ commits: Array.from({ length: 20 }, () => commit({ message: "fuck" })) }));
+  assert.equal(light.find((c) => c.id === "verbal-assault")?.severity, "misdemeanor");
+  const h = heavy.find((c) => c.id === "verbal-assault");
+  assert.equal(h?.severity, "felony");
+  assert.equal(h?.aggravated, true);
+});
+
+test("no-felony record never reaches LIFE (compressed under 100)", () => {
+  const charges: Charge[] = [
+    { id: "a", title: "A", statute: "x", detail: "", years: 80, severity: "misdemeanor" },
+    { id: "b", title: "B", statute: "y", detail: "", years: 80, severity: "misdemeanor" },
+  ];
+  const s = computeSentence(charges);
+  assert.doesNotMatch(s.text, /LIFE/);
+  assert.ok(s.totalYears < 100, `expected <100, got ${s.totalYears}`);
+});
+
+test("one felony, even huge, is big years but NOT life", () => {
+  const charges: Charge[] = [
+    { id: "f", title: "F", statute: "x", detail: "", years: 2500, severity: "felony", degree: 1 },
+  ];
+  const s = computeSentence(charges);
+  assert.doesNotMatch(s.text, /LIFE/);
+  assert.match(s.text, /2,500 years/); // raw, uncapped, comma-formatted
+});
+
+test("two felonies + high total unlock LIFE and multiples", () => {
+  const charges: Charge[] = [
+    { id: "f", title: "F", statute: "x", detail: "", years: 1700, severity: "felony", degree: 1 },
+    { id: "g", title: "G", statute: "y", detail: "", years: 1600, severity: "felony", degree: 1 },
+  ];
+  const s = computeSentence(charges);
+  assert.match(s.text, /2 consecutive LIFE/); // 3300 / 1500 = 2
+  assert.equal(s.totalYears, 3300);
+});
+
+test("recordClass reflects worst charge", () => {
+  const f = (sev: "misdemeanor" | "felony"): Charge => ({ id: "x", title: "X", statute: "s", detail: "", years: 5, severity: sev });
+  assert.equal(recordClass([]), "Model Citizen");
+  assert.equal(recordClass([f("misdemeanor")]), "Misdemeanant");
+  assert.equal(recordClass([f("felony"), f("misdemeanor")]), "Felon");
+  assert.equal(recordClass([f("felony"), f("felony")]), "Habitual Felon");
+  assert.equal(recordClass([f("felony"), f("felony"), f("felony")]), "Public Enemy");
 });
 
 console.log(`\n${passed} checks passed.`);

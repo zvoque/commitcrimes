@@ -13,12 +13,18 @@ export const metadata: Metadata = {
 // Always reflect the latest bookings.
 export const dynamic = "force-dynamic";
 
-function yearsLabel(y: number): string {
-  if (y >= 99) {
-    const lives = Math.floor(y / 99);
-    return `${lives}× LIFE`;
+function commas(n: number): string {
+  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+// Mirror the engine: LIFE needs >=2 felonies ("Habitual Felon") AND >= 1500 yrs.
+// Everyone else shows their raw years. Keep in sync with computeSentence.
+function yearsLabel(totalYears: number, recordClass: string | null): string {
+  if ((recordClass === "Habitual Felon" || recordClass === "Public Enemy") && totalYears >= 1500) {
+    const lives = Math.floor(totalYears / 1500);
+    return lives > 1 ? `${lives}× LIFE` : "LIFE";
   }
-  return `${y}y`;
+  return `${commas(totalYears)}y`;
 }
 
 export default async function WantedPage() {
@@ -79,6 +85,15 @@ export default async function WantedPage() {
                     )}
                   </p>
                   <p className="truncate text-xs text-ink-soft">
+                    {w.recordClass && (
+                      <span
+                        className={`mr-1 uppercase tracking-wide ${
+                          /felon|public enemy/i.test(w.recordClass) ? "text-stamp" : "text-ink-soft"
+                        }`}
+                      >
+                        {w.recordClass} ·
+                      </span>
+                    )}
                     {w.leadCharge ?? "·"}
                     {w.deep && (
                       <span className="ml-1 text-[#3f6f3f]">· deep record</span>
@@ -86,7 +101,7 @@ export default async function WantedPage() {
                   </p>
                 </Link>
                 <span className="shrink-0 text-right">
-                  <span className="font-stencil text-xl text-stamp">{yearsLabel(w.totalYears)}</span>
+                  <span className="font-stencil text-xl text-stamp">{yearsLabel(w.totalYears, w.recordClass)}</span>
                   <span className="block text-[0.72rem] uppercase tracking-[0.15em] text-ink-soft">
                     {w.chargesCount} count{w.chargesCount === 1 ? "" : "s"}
                   </span>

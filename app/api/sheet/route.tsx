@@ -1,6 +1,7 @@
 import { ImageResponse } from "next/og";
 import { getCrimeRecord, isValidUsername } from "@/lib/github";
 import { avatarDataUri } from "@/lib/avatar";
+import { chargeClassLabel } from "@/lib/chargeLabel";
 import { ELITE_B64, STENCIL_B64 } from "./fonts";
 
 // Full detailed rap sheet as an image — device-independent (same on mobile and
@@ -60,10 +61,18 @@ export async function GET(req: Request) {
   const avatar = await avatarDataUri(record.avatarUrl, 240);
   const verdict = guilty ? "GUILTY" : "CLEARED";
   const verdictColor = guilty ? STAMP : CLEARED;
+  const rcColor = !record.recordClass
+    ? SOFT
+    : /felon|public enemy/i.test(record.recordClass)
+      ? STAMP
+      : /model citizen/i.test(record.recordClass)
+        ? CLEARED
+        : SOFT;
 
   // Compute canvas height from content so nothing clips and there's no big gap.
   const chargesH = guilty ? charges.length * 60 + 34 : 70;
-  const height = 360 + 96 + chargesH + 150 + (record.deep ? 26 : 0);
+  const height =
+    360 + 96 + chargesH + 150 + (record.deep ? 26 : 0) + (record.recordClass ? 34 : 0);
 
   const [eliteData, stencilData] = loadFonts();
 
@@ -166,6 +175,23 @@ export async function GET(req: Request) {
                 {verdict}
               </span>
             </div>
+            {record.recordClass && (
+              <span
+                style={{
+                  display: "flex",
+                  alignSelf: "flex-start",
+                  fontSize: 11,
+                  letterSpacing: 2,
+                  textTransform: "uppercase",
+                  color: rcColor,
+                  border: `1px solid ${rcColor}`,
+                  padding: "2px 6px",
+                  marginBottom: 8,
+                }}
+              >
+                {record.recordClass}
+              </span>
+            )}
             {record.deep && (
               <span
                 style={{
@@ -235,6 +261,21 @@ export async function GET(req: Request) {
                   <span style={{ fontFamily: "Stencil", fontSize: 18, textTransform: "uppercase", marginLeft: 10 }}>
                     {c.title}
                   </span>
+                  <span
+                    style={{
+                      display: "flex",
+                      marginLeft: 8,
+                      fontSize: 9,
+                      letterSpacing: 1,
+                      textTransform: "uppercase",
+                      whiteSpace: "nowrap",
+                      padding: "1px 4px",
+                      color: (c.severity ?? "misdemeanor") === "felony" ? STAMP : SOFT,
+                      border: `1px solid ${(c.severity ?? "misdemeanor") === "felony" ? STAMP : SOFT}`,
+                    }}
+                  >
+                    {chargeClassLabel(c)}
+                  </span>
                   <span style={{ flex: 1 }} />
                   <span style={{ fontFamily: "Stencil", fontSize: 18, color: STAMP }}>{c.years}y</span>
                 </div>
@@ -243,7 +284,7 @@ export async function GET(req: Request) {
             ))
           ) : (
             <span style={{ fontSize: 15, fontStyle: "italic", color: SOFT, textAlign: "center", padding: "12px 0" }}>
-              Suspiciously clean. The Department is watching.
+              Certified clean. Cleaner than 98% of developers. Suspiciously so.
             </span>
           )}
         </div>
