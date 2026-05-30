@@ -104,18 +104,27 @@ const MAX_COMMITS = 300;
 // GitHub. This decouples GitHub load from traffic (each handle costs GitHub at
 // most once/24h regardless of how many people view it). `token`, when passed,
 // counts the GitHub calls against that user instead of the server bucket.
-export async function getCrimeRecord(login: string, token?: string): Promise<CrimeRecord | null> {
+export async function getCrimeRecord(
+  login: string,
+  token?: string,
+  opts?: { publicOnly?: boolean }
+): Promise<CrimeRecord | null> {
   if (!isValidUsername(login)) return null;
 
   // Honor opt-out: removed logins are treated as no record (never re-cached).
   if (await isRemoved(login)) return null;
 
   const cached = await getCachedRecord(login);
-  // A published deep record is sticky: serve it as-is and never overwrite it with
-  // recomputed public data. The owner refreshes it by re-publishing from /deep.
-  if (cached?.record.deep) return cached.record;
-  if (cached && Date.now() - cached.updatedAt.getTime() < DAY_MS) {
-    return cached.record;
+  // publicOnly bypasses the sticky-deep + TTL cache to recompute the TRUE public
+  // record — used by /deep so the public-vs-private delta is honest (a published
+  // deep user's "public" record must not be their own deep record).
+  if (!opts?.publicOnly) {
+    // A published deep record is sticky: serve it as-is, never overwrite with
+    // recomputed public data. The owner refreshes it by re-publishing from /deep.
+    if (cached?.record.deep) return cached.record;
+    if (cached && Date.now() - cached.updatedAt.getTime() < DAY_MS) {
+      return cached.record;
+    }
   }
 
   const enc = encodeURIComponent(login); // defense-in-depth (login is already validated)
@@ -183,8 +192,9 @@ export async function getCrimeRecord(login: string, token?: string): Promise<Cri
     await cacheRecord(record); // store-all read-through cache (preserves claimed)
     return record;
   } catch (err) {
-    // GitHub down or rate-limited: serve stale cache if we have any.
-    if (cached) return cached.record;
+    // GitHub down or rate-limited: serve stale cache if we have any. Not for
+    // publicOnly (would hand back a sticky-deep record mislabeled as public).
+    if (cached && !opts?.publicOnly) return cached.record;
     throw err;
   }
 }

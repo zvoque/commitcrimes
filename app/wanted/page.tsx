@@ -88,10 +88,12 @@ export default async function WantedPage() {
                     {w.recordClass && (
                       <span
                         className={`mr-1 uppercase tracking-wide ${
-                          /felon|public enemy/i.test(w.recordClass) ? "text-stamp" : "text-ink-soft"
+                          /felon|public enemy/i.test(w.recordClass)
+                            ? "font-stencil text-stamp"
+                            : "text-ink-soft"
                         }`}
                       >
-                        {w.recordClass} ·
+                        {/public enemy/i.test(w.recordClass) ? `★ ${w.recordClass}` : w.recordClass} ·
                       </span>
                     )}
                     {w.leadCharge ?? "·"}

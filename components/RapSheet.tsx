@@ -98,14 +98,16 @@ export default function RapSheet({ record }: { record: CrimeRecord }) {
           {record.recordClass && (
             <span
               className={`mb-2 mr-2 inline-block w-fit border px-1.5 py-0.5 text-[0.68rem] uppercase tracking-[0.2em] ${
-                /felon|public enemy/i.test(record.recordClass)
-                  ? "border-stamp text-stamp"
-                  : /model citizen/i.test(record.recordClass)
-                    ? "border-[#3f6f3f] text-[#3f6f3f]"
-                    : "border-ink/50 text-ink-soft"
+                /public enemy/i.test(record.recordClass)
+                  ? "border-stamp bg-stamp text-paper shadow-[2px_2px_0_0_rgba(20,16,10,0.4)]"
+                  : /felon/i.test(record.recordClass)
+                    ? "border-stamp text-stamp"
+                    : /model citizen/i.test(record.recordClass)
+                      ? "border-[#3f6f3f] text-[#3f6f3f]"
+                      : "border-ink/50 text-ink-soft"
               }`}
             >
-              {record.recordClass}
+              {/public enemy/i.test(record.recordClass) ? `★ ${record.recordClass}` : record.recordClass}
             </span>
           )}
           {record.deep && (

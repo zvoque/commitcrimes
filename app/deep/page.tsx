@@ -43,7 +43,7 @@ export default async function DeepPage() {
           const login = await getClerkGithubLogin();
           if (login) {
             [publicRecord, claimed] = await Promise.all([
-              getCrimeRecord(login).catch(() => null),
+              getCrimeRecord(login, undefined, { publicOnly: true }).catch(() => null),
               isClaimed(login),
             ]);
           }
@@ -53,7 +53,7 @@ export default async function DeepPage() {
           if (record) {
             // Upsell punch: how much worse is the full sentence vs public-only.
             [publicRecord, claimed] = await Promise.all([
-              getCrimeRecord(record.login).catch(() => null),
+              getCrimeRecord(record.login, undefined, { publicOnly: true }).catch(() => null),
               isClaimed(record.login),
             ]);
           }

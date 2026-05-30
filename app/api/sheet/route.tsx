@@ -1,7 +1,12 @@
 import { ImageResponse } from "next/og";
 import { getCrimeRecord, isValidUsername } from "@/lib/github";
+import { auth } from "@clerk/nextjs/server";
+import { getGithubTokenInfo, getClerkGithubLogin } from "@/lib/clerkGithub";
+import { getDeepRecordForToken, sanitizeDeepRecord } from "@/lib/deep";
+import { clerkServerEnabled } from "@/lib/config";
 import { avatarDataUri } from "@/lib/avatar";
 import { chargeClassLabel } from "@/lib/chargeLabel";
+import type { CrimeRecord } from "@/lib/types";
 import { ELITE_B64, STENCIL_B64 } from "./fonts";
 
 // Full detailed rap sheet as an image — device-independent (same on mobile and
@@ -49,8 +54,37 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 export async function GET(req: Request) {
-  const u = new URL(req.url).searchParams.get("u")?.trim() ?? "";
-  const record = isValidUsername(u) ? await getCrimeRecord(u).catch(() => null) : null;
+  const url = new URL(req.url);
+  const u = url.searchParams.get("u")?.trim() ?? "";
+  const wantDeep = url.searchParams.get("deep") === "1";
+
+  let record: CrimeRecord | null = null;
+  let deepImage = false;
+  // Owner-only LIVE deep image: session-gated, sanitized, never cached. Lets the
+  // /deep copy/download match the on-screen deep sentence instead of serving the
+  // stale/public record. Verified caller == the requested handle; private+no-store
+  // so it's never shared/CDN-cached, and sanitized to counts-only regardless.
+  if (wantDeep && clerkServerEnabled && isValidUsername(u)) {
+    try {
+      const { userId } = await auth();
+      const login = userId ? await getClerkGithubLogin() : null;
+      if (userId && login && login.toLowerCase() === u.toLowerCase()) {
+        const info = await getGithubTokenInfo(userId);
+        if (info?.scopes.includes("repo")) {
+          const live = await getDeepRecordForToken(info.token);
+          if (live) {
+            record = sanitizeDeepRecord(live);
+            deepImage = true;
+          }
+        }
+      }
+    } catch {
+      /* fall through to the public record */
+    }
+  }
+  if (!record) {
+    record = isValidUsername(u) ? await getCrimeRecord(u).catch(() => null) : null;
+  }
 
   if (!record) {
     return new Response("Not found", { status: 404 });
@@ -68,6 +102,7 @@ export async function GET(req: Request) {
       : /model citizen/i.test(record.recordClass)
         ? CLEARED
         : SOFT;
+  const enemyRank = /public enemy/i.test(record.recordClass ?? "");
 
   // Compute canvas height from content so nothing clips and there's no big gap.
   const chargesH = guilty ? charges.length * 60 + 34 : 70;
@@ -183,8 +218,9 @@ export async function GET(req: Request) {
                   fontSize: 11,
                   letterSpacing: 2,
                   textTransform: "uppercase",
-                  color: rcColor,
-                  border: `1px solid ${rcColor}`,
+                  color: enemyRank ? PAPER : rcColor,
+                  background: enemyRank ? STAMP : "transparent",
+                  border: `1px solid ${enemyRank ? STAMP : rcColor}`,
                   padding: "2px 6px",
                   marginBottom: 8,
                 }}
@@ -332,7 +368,9 @@ export async function GET(req: Request) {
         { name: "Stencil", data: stencilData, weight: 400, style: "normal" },
       ],
       headers: {
-        "Cache-Control": "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800",
+        "Cache-Control": deepImage
+          ? "private, no-store"
+          : "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800",
       },
     }
   );

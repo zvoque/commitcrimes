@@ -73,7 +73,9 @@ export default function ResultView({
   const tweet = `${shareText}\n\n${recordUrl}\n\nvia @gitmostwanted`;
   const tweetIntent = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweet)}`;
   // Server-rendered full rap sheet (fixed width, real fonts, all charges, mugshot).
-  const sheetImg = `/api/sheet?u=${encodeURIComponent(record.login)}`;
+  // Deep records request the owner-only live deep image (session-gated, no-store)
+  // so the copied sheet matches the on-screen deep sentence, not the public one.
+  const sheetImg = `/api/sheet?u=${encodeURIComponent(record.login)}${deep ? "&deep=1" : ""}`;
   const fileName = `commitcrimes-${record.login}.png`;
 
   // Probe share/copy support, then prefetch the image so the button is armed.
