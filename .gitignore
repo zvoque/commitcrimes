@@ -52,3 +52,6 @@ AGENTS.md
 CLAUDE.md
 SPEC.md
 CODE_AUDIT_REPORT.md
+
+# local-only notes / roadmap (never commit)
+*.local.md

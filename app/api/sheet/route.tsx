@@ -27,6 +27,13 @@ function loadFonts(): [ArrayBuffer, ArrayBuffer] {
   return fontCache;
 }
 
+// Hard-truncate a handle for the image. Satori's text-overflow:ellipsis is
+// unreliable, and the embedded Stencil font may lack a "…" glyph, so trim the
+// string with ASCII dots. Inmate column is tight (200px), footer has more room.
+function trunc(s: string, n: number): string {
+  return s.length > n ? `${s.slice(0, n)}...` : s;
+}
+
 // Dotted-leader dossier row: label … value
 function Row({ label, value }: { label: string; value: string }) {
   return (
@@ -135,7 +142,7 @@ export async function GET(req: Request) {
               }}
             >
               <span style={{ fontSize: 11, letterSpacing: 2, textTransform: "uppercase", opacity: 0.75 }}>Inmate</span>
-              <span style={{ fontFamily: "Stencil", fontSize: 14 }}>@{record.login}</span>
+              <span style={{ fontFamily: "Stencil", fontSize: 14 }}>@{trunc(record.login, 14)}</span>
             </div>
             <span style={{ marginTop: 4, fontSize: 11, letterSpacing: 2, textTransform: "uppercase", color: SOFT, textAlign: "center" }}>
               HT: {stats.heightYears} yrs on record
@@ -256,7 +263,7 @@ export async function GET(req: Request) {
             <span style={{ fontSize: 12, letterSpacing: 2, textTransform: "uppercase", color: SOFT }}>
               The State of GitHub v.
             </span>
-            <span style={{ fontFamily: "Stencil", fontSize: 18, margin: "2px 0" }}>@{record.login}</span>
+            <span style={{ fontFamily: "Stencil", fontSize: 18, margin: "2px 0" }}>@{trunc(record.login, 24)}</span>
             <span style={{ fontSize: 11, letterSpacing: 2, textTransform: "uppercase", color: SOFT }}>commitcrimes.dev</span>
           </div>
           <div style={{ display: "flex", alignItems: "flex-end", height: 30 }}>

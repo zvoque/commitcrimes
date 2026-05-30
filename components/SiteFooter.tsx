@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export default function SiteFooter() {
   return (
-    <footer className="relative z-10 mt-16 w-full max-w-2xl border-t border-ink/30 px-4 pb-10 pt-5 text-center">
+    <footer className="relative z-10 mx-auto mt-16 w-full max-w-2xl border-t border-ink/30 px-4 pb-10 pt-5 text-center">
       <nav className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-[0.72rem] uppercase tracking-[0.2em] text-ink-soft">
         <Link href="/" className="hover:text-stamp">Book</Link>
         <Link href="/wanted" className="hover:text-stamp">Most Wanted</Link>

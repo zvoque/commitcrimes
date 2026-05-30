@@ -12,13 +12,13 @@ export default function LookYourselfUp() {
   if (enabled) {
     return (
       <SignInButton mode="modal" forceRedirectUrl="/me">
-        <button className={cls}>Look yourself up &rarr;</button>
+        <button className={cls}>Already booked? Sign in &rarr;</button>
       </SignInButton>
     );
   }
   return (
     <Link href="/deep" className={cls}>
-      Look yourself up &rarr;
+      Already booked? Sign in &rarr;
     </Link>
   );
 }

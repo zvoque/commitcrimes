@@ -66,11 +66,11 @@ export default function RapSheet({ record }: { record: CrimeRecord }) {
               className="mugshot aspect-square w-full object-cover"
             />
           </div>
-          <div className="mt-1 flex items-center justify-between border-2 border-t-0 border-ink bg-ink px-2 py-1 text-paper">
-            <span className="text-[0.68rem] tracking-[0.18em] uppercase opacity-75">
+          <div className="mt-1 flex items-center justify-between gap-2 border-2 border-t-0 border-ink bg-ink px-2 py-1 text-paper">
+            <span className="shrink-0 text-[0.68rem] tracking-[0.18em] uppercase opacity-75">
               Inmate
             </span>
-            <span className="truncate font-stencil text-sm">@{record.login}</span>
+            <span className="min-w-0 truncate font-stencil text-sm">@{record.login}</span>
           </div>
           <p className="mt-1 text-center text-[0.7rem] tracking-[0.16em] uppercase text-ink-soft">
             HT: {stats.heightYears} yrs on record
@@ -166,7 +166,7 @@ export default function RapSheet({ record }: { record: CrimeRecord }) {
 
       {/* Footer */}
       <div className="relative z-10 flex items-end justify-between gap-3 border-t-2 border-ink px-5 py-3">
-        <div>
+        <div className="min-w-0">
           <p className="text-[0.72rem] tracking-[0.2em] uppercase text-ink-soft">
             The State of GitHub v.
           </p>
@@ -174,7 +174,7 @@ export default function RapSheet({ record }: { record: CrimeRecord }) {
             href={`https://github.com/${record.login}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="my-0.5 block font-stencil text-lg leading-tight hover:text-stamp"
+            className="my-0.5 block truncate font-stencil text-lg leading-tight hover:text-stamp"
           >
             @{record.login}
           </a>
@@ -182,7 +182,9 @@ export default function RapSheet({ record }: { record: CrimeRecord }) {
             commitcrimes.dev
           </p>
         </div>
-        <Barcode />
+        <div className="shrink-0">
+          <Barcode />
+        </div>
       </div>
 
       {/* Absurd in-character boilerplate (vibe) */}

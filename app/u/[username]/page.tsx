@@ -7,9 +7,14 @@ import { isClaimed } from "@/lib/store";
 import ResultView from "@/components/ResultView";
 import SiteFooter from "@/components/SiteFooter";
 import BrandMark from "@/components/BrandMark";
+import SuspectSearch from "@/components/SuspectSearch";
 import { clerkClientEnabled as clerkEnabled } from "@/lib/config";
 
+const SITE = "https://commitcrimes.dev";
+
 const load = cache(getCrimeRecord);
+// Deduped across generateMetadata + the page render in one request.
+const claimedOf = cache(isClaimed);
 
 // True only when the signed-in viewer's GitHub handle matches this record, so
 // the badge snippet is offered to the owner alone. Uses the Clerk external
@@ -35,12 +40,18 @@ export async function generateMetadata(
     return { title: `No record found · CommitCrimes`, robots: { index: false, follow: true } };
   }
 
-  const title = `@${record.login}: ${record.sentence.text} · CommitCrimes`;
-  const description = record.sentence.headline;
+  const title = `@${record.login} on CommitCrimes: ${record.sentence.text}`;
+  // Parody-wrap so any out-of-context search/social snippet self-identifies as
+  // satire, not a factual assertion about the person.
+  const description = `Satire: ${record.sentence.headline.replace(/\.?$/, ".")} A parody CommitCrimes rap sheet from public GitHub activity. Not a real record.`;
   const ogImage = `/api/og?u=${record.login}`;
-  // Index records with actual charges; keep thin/clean ones out of the index
-  // (avoids bloat from every transiently-looked-up handle).
-  const indexable = record.charges.length > 0;
+  // Index CONSENTED records only. A claimed record means the subject signed in
+  // as themselves and opted in, which is the safe set to let search engines
+  // amplify. Unclaimed records stay viewable by direct link (parody) but
+  // noindexed, so we never promote unconsented statements about real people.
+  // Virality is unaffected: shares are direct links + OG cards, not search.
+  const claimed = await claimedOf(username).catch(() => false);
+  const indexable = claimed;
 
   return {
     title,
@@ -69,11 +80,36 @@ export default async function SuspectPage(props: PageProps<"/u/[username]">) {
   const { username } = await props.params;
   const record = await load(username).catch(() => null);
   const [owner, claimed] = record
-    ? await Promise.all([viewerOwns(username), isClaimed(username)])
+    ? await Promise.all([viewerOwns(username), claimedOf(username)])
     : [false, false];
+
+  // Only emit structured data for consented (claimed) records — same posture as
+  // indexing. Never assert facts about a person who did not opt in.
+  const breadcrumbLd = record && claimed
+    ? {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "CommitCrimes", item: `${SITE}/` },
+          { "@type": "ListItem", position: 2, name: "Most Wanted", item: `${SITE}/wanted` },
+          {
+            "@type": "ListItem",
+            position: 3,
+            name: `@${record.login}`,
+            item: `${SITE}/u/${record.login}`,
+          },
+        ],
+      }
+    : null;
 
   return (
     <main className="paper-bg relative flex flex-1 flex-col items-center overflow-hidden px-5 pt-5 pb-10 sm:pb-14">
+      {breadcrumbLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
+        />
+      )}
       <div className="grain-overlay" />
 
       <BrandMark className="relative z-10 mb-8 self-start" />
@@ -100,11 +136,14 @@ function NoRecord({ username }: { username: string }) {
         <span className="text-ink">@{username.slice(0, 40)}</span>. Either
         they&apos;re clean, in hiding, or never existed.
       </p>
+      <div className="mt-6 text-left">
+        <SuspectSearch compact />
+      </div>
       <Link
-        href="/"
-        className="mt-6 inline-block border-2 border-ink bg-ink px-5 py-2 text-sm uppercase tracking-[0.16em] text-paper font-stencil"
+        href="/wanted"
+        className="mt-4 inline-block text-sm uppercase tracking-[0.14em] text-ink-soft underline decoration-dotted underline-offset-4 hover:text-stamp"
       >
-        Book someone else
+        Or see the Most Wanted &rarr;
       </Link>
     </div>
   );
