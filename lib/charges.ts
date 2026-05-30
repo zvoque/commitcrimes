@@ -409,6 +409,26 @@ export function buildCharges(input: RecordInput): Charge[] {
     });
   }
 
+  // Habitual Misdemeanant — relentless petty crime escalates to a felony, like
+  // real habitual-offender statutes. Only when there's no felony yet AND the
+  // record is genuinely prolific, so felony/LIFE stay rare and earned. Flips the
+  // offender to Felon, which lifts the misdemeanant cap so the number runs real.
+  const felonyN = charges.filter((c) => c.severity === "felony").length;
+  if (felonyN === 0) {
+    const misd = charges.filter((c) => (c.severity ?? "misdemeanor") === "misdemeanor");
+    const misdSum = misd.reduce((s, c) => s + c.years, 0);
+    if (misd.length >= 6 || misdSum >= 150) {
+      add({
+        id: "habitual-misdemeanant",
+        title: "Habitual Misdemeanant",
+        statute: "§ 1170.12",
+        detail: `${misd.length} petty offenses on record. Volume this high is its own felony.`,
+        base: clamp(Math.round(misdSum * 0.6), 80, 600), perCount: 0, count: 0, cap: 600,
+        severity: "felony",
+      });
+    }
+  }
+
   return charges.sort((a, b) => b.years - a.years);
 }
 

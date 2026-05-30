@@ -250,6 +250,25 @@ test("two felonies + high total unlock LIFE and multiples", () => {
   assert.equal(s.totalYears, 3300);
 });
 
+test("relentless petty crime escalates to Habitual Misdemeanant felony", () => {
+  // Varied vague words (no single one repeats enough for Habitual Offender) on a
+  // feature branch (no main push) so the only path to felony is sheer volume.
+  const words = ["fix", "wip", "update", "stuff", "things", "oops", "misc", "cleanup", "tmp", "saves"];
+  const commits = Array.from({ length: 100 }, (_, i) =>
+    commit({ message: words[i % words.length], ref: "refs/heads/feature", dow: 6 })
+  );
+  const charges = buildCharges(makeInput({ commits }));
+  const hm = charges.find((c) => c.id === "habitual-misdemeanant");
+  assert.ok(hm, "prolific petty record should escalate");
+  assert.equal(hm!.severity, "felony");
+  assert.equal(recordClass(charges), "Felon");
+});
+
+test("a light record does NOT escalate to Habitual Misdemeanant", () => {
+  const charges = buildCharges(makeInput({ commits: [commit({ message: "fix" }), commit({ message: "wip" })] }));
+  assert.equal(charges.find((c) => c.id === "habitual-misdemeanant"), undefined);
+});
+
 test("recordClass reflects worst charge", () => {
   const f = (sev: "misdemeanor" | "felony"): Charge => ({ id: "x", title: "X", statute: "s", detail: "", years: 5, severity: sev });
   assert.equal(recordClass([]), "Model Citizen");
